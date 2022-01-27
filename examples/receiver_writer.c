@@ -18,6 +18,7 @@ int stop = 0;
 
 void sig_int(int signum)
 {
+    stop = 1;
 }
 
 int main(int argc, const char* argv[])
