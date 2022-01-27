@@ -8,11 +8,17 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/un.h>
+#include <signal.h>
 
 #include "print_dnstap.c"
 
 FILE* fp = 0;
 struct dnswire_writer writer;
+int stop = 0;
+
+void sig_int(int signum)
+{
+}
 
 int main(int argc, const char* argv[])
 {
@@ -32,6 +38,8 @@ int main(int argc, const char* argv[])
             fprintf(stderr, "Unable to initialize dnswire writer\n");
             return 1;
         }
+
+        signal(SIGINT, sig_int);
     }
 
     /*
@@ -144,7 +152,7 @@ int main(int argc, const char* argv[])
     int done = 0;
 
     printf("receiving...\n");
-    while (!done) {
+    while (!done && !stop) {
         switch (dnswire_reader_read(&reader, clifd)) {
         case dnswire_have_dnstap:
             /*
@@ -201,6 +209,28 @@ int main(int argc, const char* argv[])
     shutdown(clifd, SHUT_RDWR);
     close(clifd);
     close(sockfd);
+
+    if (fp) {
+        dnswire_writer_stop(&writer);
+        done = 0;
+        while (!done) {
+            switch (dnswire_writer_fwrite(&writer, fp)) {
+            case dnswire_ok:
+                done = 1;
+                break;
+            case dnswire_again:
+                break;
+            case dnswire_endofdata:
+                done = 1;
+                break;
+            default:
+                fprintf(stderr, "dnswire_writer_fwrite() error\n");
+                done = 1;
+            }
+        }
+        fflush(fp);
+        fclose(fp);
+    }
 
     return 0;
 }
